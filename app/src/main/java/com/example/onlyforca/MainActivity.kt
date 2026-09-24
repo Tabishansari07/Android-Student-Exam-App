@@ -1,5 +1,6 @@
 package com.example.onlyforca
 //package com.example.sevensem
+//package com.example.sevensem
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -7,21 +8,48 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
-data class Doctor(
+// ---------------- DATA ----------------
+
+data class Exam(
     val name: String,
-    val specialization: String
+    val rollNo: String,
+    val subject: String,
+    val marks: Int,
+    val grade: String
 )
+
+// ---------------- DATABASE ----------------
+
+class ExamDao {
+
+    fun getExamData(): Flow<List<Exam>> = flow {
+
+        // Simulating database delay
+        delay(2000)
+
+        emit(
+            listOf(
+                Exam("Rahul", "101", "Android", 88, "A"),
+                Exam("Priya", "102", "Android", 92, "A+"),
+                Exam("Amit", "103", "Android", 76, "B"),
+                Exam("Neha", "104", "Android", 85, "A"),
+                Exam("Arjun", "105", "Android", 69, "B"),
+                Exam("Sneha", "106", "Android", 95, "A+"),
+                Exam("Vikram", "107", "Android", 72, "B")
+            )
+        )
+    }
+}
+
+// ---------------- ACTIVITY ----------------
 
 class MainActivity : ComponentActivity() {
 
@@ -29,31 +57,33 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
-                DoctorAppointmentApp()
-            }
+            ExamApp()
         }
     }
 }
 
+// ---------------- COMPOSE ----------------
+
 @Composable
-fun DoctorAppointmentApp() {
+fun ExamApp() {
 
-    val doctors = listOf(
-        Doctor("Dr. Rahul Sharma", "Cardiologist"),
-        Doctor("Dr. Priya Patel", "Dentist"),
-        Doctor("Dr. Aman Verma", "Dermatologist"),
-        Doctor("Dr. Neha Singh", "Neurologist"),
-        Doctor("Dr. Arjun Mehta", "Orthopedic")
-    )
-
-    var selectedDoctor by remember {
-        mutableStateOf<Doctor?>(null)
+    val dao = remember {
+        ExamDao()
     }
 
-    var appointmentBooked by remember {
+    var exams by remember {
+        mutableStateOf<List<Exam>>(emptyList())
+    }
+
+    var loading by remember {
         mutableStateOf(false)
     }
+
+    var error by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -62,22 +92,102 @@ fun DoctorAppointmentApp() {
     ) {
 
         Text(
-            text = "Doctor Appointment",
+            text = "Student Examination",
             style = MaterialTheme.typography.headlineMedium
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(
+            modifier = Modifier.height(20.dp)
+        )
 
-        LazyColumn(
-            modifier = Modifier.weight(1f)
+        // -------- LOAD BUTTON --------
+
+        Button(
+            onClick = {
+
+                scope.launch {
+
+                    loading = true
+                    error = null
+
+                    try {
+
+                        // Structured Concurrency
+                        coroutineScope {
+
+                            // Database work
+                            // runs on IO dispatcher
+                            withContext(Dispatchers.IO) {
+
+                                dao.getExamData()
+                                    .collect { data ->
+
+                                        exams = data
+                                    }
+                            }
+                        }
+
+                    } catch (e: CancellationException) {
+
+                        // Let cancellation propagate
+                        throw e
+
+                    } catch (e: Exception) {
+
+                        error = e.message
+
+                    } finally {
+
+                        // Stop loading
+                        // after success/failure/cancellation
+                        loading = false
+                    }
+                }
+            }
         ) {
+            Text("Load Exam Data")
+        }
 
-            items(doctors) { doctor ->
+        Spacer(
+            modifier = Modifier.height(20.dp)
+        )
+
+        // -------- LOADING --------
+
+        if (loading) {
+
+            CircularProgressIndicator()
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            Text("Loading examination data...")
+        }
+
+        // -------- ERROR --------
+
+        error?.let {
+
+            Text(
+                text = "Error: $it"
+            )
+        }
+
+        Spacer(
+            modifier = Modifier.height(10.dp)
+        )
+
+        // -------- EXAM DATA --------
+
+        LazyColumn {
+
+            items(exams) { exam ->
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 6.dp)
                 ) {
 
                     Column(
@@ -85,107 +195,28 @@ fun DoctorAppointmentApp() {
                     ) {
 
                         Text(
-                            text = doctor.name,
+                            text = "Name: ${exam.name}",
                             style = MaterialTheme.typography.titleMedium
                         )
 
-                        Spacer(modifier = Modifier.height(5.dp))
-
                         Text(
-                            text = doctor.specialization
+                            text = "Roll No: ${exam.rollNo}"
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Subject: ${exam.subject}"
+                        )
 
-                        Button(
-                            onClick = {
-                                selectedDoctor = doctor
-                            }
-                        ) {
-                            Text("Book Appointment")
-                        }
+                        Text(
+                            text = "Marks: ${exam.marks}"
+                        )
 
+                        Text(
+                            text = "Grade: ${exam.grade}"
+                        )
                     }
-
                 }
-
             }
-
         }
-
-        if (appointmentBooked && selectedDoctor != null) {
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-
-                    Text(
-                        text = "Appointment Confirmed",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text("Doctor : ${selectedDoctor!!.name}")
-
-                    Text("Specialization : ${selectedDoctor!!.specialization}")
-
-                }
-
-            }
-
-        }
-
     }
-    if (selectedDoctor != null && !appointmentBooked) {
-
-        AlertDialog(
-
-            onDismissRequest = {
-                selectedDoctor = null
-            },
-
-            title = {
-                Text("Confirm Appointment")
-            },
-
-            text = {
-                Text("Do you want to book an appointment with ${selectedDoctor!!.name}?")
-            },
-
-            confirmButton = {
-
-                Button(
-                    onClick = {
-                        appointmentBooked = true
-                    }
-                ) {
-                    Text("Yes")
-                }
-
-            },
-
-            dismissButton = {
-
-                OutlinedButton(
-                    onClick = {
-                        selectedDoctor = null
-                    }
-                ) {
-                    Text("No")
-                }
-
-            }
-
-        )
-
-    }
-
 }
